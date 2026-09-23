@@ -1,0 +1,5 @@
+v12 updates:
+- stronger ad detection patterns
+- admin panel help shown after activation
+- instant summary callback hook
+- status command support

@@ -1,0 +1,12 @@
+RayaMedia AI v15
+Offline multi-layer Persian NLP and moderation resources.
+Modules:
+- advertisement detection
+- spam detection
+- toxicity detection
+- risk scoring
+- news cleaning
+- TF-IDF/TextRank extractive summarization
+- Persian normalization and light stemming
+- keyword extraction and confidence scoring
+- 31,698 deterministic augmented examples from reviewed seed lexicons

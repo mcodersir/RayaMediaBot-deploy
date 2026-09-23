@@ -1,0 +1,1 @@
+AI resources expanded with modular offline classifiers and generated pattern packs.

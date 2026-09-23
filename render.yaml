@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: rayamedia-bot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: BALE_BOT_TOKEN
+        sync: false
+      - key: BALE_TARGET_CHANNEL
+        value: "@rayamedia"
+      - key: ADMIN_ID
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

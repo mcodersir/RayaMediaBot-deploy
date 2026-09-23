@@ -1,0 +1,23 @@
+{
+  "telegram_channels": [
+    "moghavematkhabar",
+    "khabarfuri",
+    "Naya_Press",
+    "BazChiShod",
+    "alonews",
+    "Squad_iran",
+    "Iranian_Militarism"
+  ],
+  "target_bale_channel": "@rayamedia",
+  "poll_seconds": 60,
+  "summary_interval_minutes": 30,
+  "summary_item_count": 10,
+  "initial_posts_per_channel": 3,
+  "max_media_per_post": 4,
+  "request_timeout_seconds": 30,
+  "duplicate_similarity_threshold": 0.88,
+  "duplicate_window_hours": 12,
+  "skip_advertisements": true,
+  "skip_profanity": true,
+  "skip_incitement": true
+}

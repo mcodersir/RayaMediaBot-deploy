@@ -1,0 +1,23 @@
+{
+  "version": "v15-expanded",
+  "total_examples": 31698,
+  "variants_per_seed": 256,
+  "datasets": {
+    "ads_patterns": {
+      "seed_count": 96,
+      "expanded_count": 21073
+    },
+    "insult_patterns": {
+      "seed_count": 26,
+      "expanded_count": 5140
+    },
+    "news_labels": {
+      "seed_count": 7,
+      "expanded_count": 664
+    },
+    "risk_terms": {
+      "seed_count": 25,
+      "expanded_count": 4821
+    }
+  }
+}
