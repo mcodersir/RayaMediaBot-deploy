@@ -16,7 +16,7 @@ from .local_ai import build_digest
 from .moderation import moderate
 from .storage import Storage
 from .telegram_public import TelegramPublicReader
-from .text_processing import append_footer, clean_text, content_hash
+from .text_processing import append_footer, apply_news_label, clean_text, content_hash
 
 
 log = logging.getLogger(__name__)
@@ -60,11 +60,11 @@ class RayaMediaService:
     def _smart_label(self, text: str) -> str:
         t = text.lower()
         if any(x in t for x in ["فوری", "همین لحظه", "لحظاتی پیش"]):
-            return "#فوری |"
+            return "فوری"
         if any(x in t for x in ["تحلیل", "بررسی", "ارزیابی"]):
-            return "#تحلیل |"
+            return "تحلیل"
         if any(x in t for x in ["تکمیلی", "جزئیات بیشتر", "ادامه خبر"]):
-            return "#تکمیلی |"
+            return "تکمیلی"
         return ""
 
     def _publish_post(self, text: str, media_items) -> None:
@@ -168,7 +168,7 @@ class RayaMediaService:
 
             label = self._smart_label(cleaned)
             if label:
-                cleaned = f"{label}\n{cleaned}"
+                cleaned = apply_news_label(cleaned, label)
 
             final_text = append_footer(cleaned, category)
             self._publish_post(final_text, post.media)
@@ -184,9 +184,9 @@ class RayaMediaService:
                 published=True,
             )
             log.info("Published @%s/%s -> #%s", channel, post.post_id, category)
-            # Human-like publishing rhythm to avoid burst spam.
-            # Longer delay prevents Telegram/Bale flood behaviour.
-            time.sleep(random.uniform(45, 150))
+            # Keep a small anti-burst pause without creating multi-minute
+            # backlogs when several channels publish at the same time.
+            time.sleep(random.uniform(4, 10))
 
     def _summary_due(self) -> bool:
         raw = self.storage.get_state("last_digest_at")
@@ -217,7 +217,12 @@ class RayaMediaService:
         while True:
             cycle_started = time.monotonic()
             dynamic_channels = self.storage.list_channels()
-            channels = list(dict.fromkeys([*self.cfg.telegram_channels, *dynamic_channels]))
+            disabled = {x.lower() for x in self.storage.list_disabled_channels()}
+            channels = [
+                channel
+                for channel in dict.fromkeys([*self.cfg.telegram_channels, *dynamic_channels])
+                if channel.lower() not in disabled
+            ]
             for channel in channels:
                 try:
                     self._process_channel(channel)
