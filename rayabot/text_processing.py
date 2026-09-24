@@ -20,6 +20,10 @@ TELEGRAM_LINK_RE = re.compile(
     r"(?i)(?:https?://)?(?:t\.me|telegram\.me)/(?:\+?[A-Za-z0-9_\-]+)(?:/\d+)?(?:\?[^\s]*)?"
 )
 GENERIC_URL_RE = re.compile(r"(?i)(?:https?://|www\.|tg://)\S+")
+TELEGRAM_SEARCH_JUNK_RE = re.compile(
+    r"(?im)^\s*(?:[|｜]\s*)?#?[A-Za-z]\s*$|^\s*\??q\s*=\s*%23[A-Za-z0-9_%+.-]+\s*$"
+)
+TELEGRAM_QUERY_FRAGMENT_RE = re.compile(r"(?i)(?:\?|&)q=%23[A-Za-z0-9_%+.-]+")
 HANDLE_RE = re.compile(r"(?<!\w)@([A-Za-z0-9_]{3,64})")
 MULTISPACE_RE = re.compile(r"[ \t\u200c\u200f]+")
 MULTIBLANK_RE = re.compile(r"\n{3,}")
@@ -69,6 +73,7 @@ def normalize_political_terms(text: str) -> str:
 def strip_source_links_and_branding(text: str) -> str:
     text = TELEGRAM_LINK_RE.sub("", text)
     text = GENERIC_URL_RE.sub("", text)
+    text = TELEGRAM_QUERY_FRAGMENT_RE.sub("", text)
 
     def handle_repl(match: re.Match[str]) -> str:
         handle = match.group(1).lower()
@@ -136,6 +141,7 @@ def clean_text(text: str) -> str:
     text = _merge_emoji_header_lines(text)
     text = strip_source_links_and_branding(text)
     text = CHANNEL_JUNK_RE.sub("", text)
+    text = TELEGRAM_SEARCH_JUNK_RE.sub("", text)
     text = normalize_political_terms(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"(?m)^\s*:\s*", "", text)
