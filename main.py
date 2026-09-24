@@ -84,6 +84,8 @@ def main() -> int:
             BaleClient(cfg.bale_bot_token),
             service.storage,
             os.getenv("ADMIN_ID", "707142549"),
+            cfg.target_bale_channel,
+            cfg.telegram_channels,
         )
         threading.Thread(
             target=_run_admin_panel,
@@ -91,7 +93,14 @@ def main() -> int:
             name="admin-panel",
             daemon=True,
         ).start()
-        service.run_forever()
+        while True:
+            try:
+                service.run_forever()
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "Service loop crashed; restarting automatically in 5 seconds"
+                )
+                time.sleep(5)
     except KeyboardInterrupt:
         logging.getLogger(__name__).info("Stopped by user")
         return 0
