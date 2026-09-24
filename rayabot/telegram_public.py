@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -17,6 +17,35 @@ from .models import MediaItem, TelegramPost
 
 log = logging.getLogger(__name__)
 PHOTO_STYLE_RE = re.compile(r"background-image\s*:\s*url\((?:'|\")?(.*?)(?:'|\")?\)", re.I)
+
+
+def _extract_message_text(node) -> str:
+    """Preserve only real Telegram line breaks, not inline-tag boundaries."""
+    if node is None:
+        return ""
+
+    parts: list[str] = []
+
+    def walk(parent) -> None:
+        for child in parent.children:
+            if isinstance(child, NavigableString):
+                parts.append(str(child))
+                continue
+            if not isinstance(child, Tag):
+                continue
+            if child.name == "br":
+                parts.append("\n")
+                continue
+            walk(child)
+            if child.name in {"p", "div", "li"}:
+                parts.append("\n")
+
+    walk(node)
+    value = html.unescape("".join(parts))
+    value = re.sub(r"[ \t\f\v]+", " ", value)
+    value = re.sub(r" *\n *", "\n", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    return value.strip()
 
 
 class TelegramPublicReader:
@@ -71,7 +100,7 @@ class TelegramPublicReader:
                 continue
 
             text_node = node.select_one(".tgme_widget_message_text")
-            text = text_node.get_text("\n", strip=True) if text_node else ""
+            text = _extract_message_text(text_node)
             # Preserve hidden/anchored URLs for moderation. clean_text() removes
             # them before publishing, but moderation can still catch betting,
             # bot and advertising links that are not visible in the caption.
