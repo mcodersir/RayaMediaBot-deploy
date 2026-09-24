@@ -39,6 +39,12 @@ PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)ارتباط\s*[،,:|]\s*تبلیغات"),
     re.compile(r"(?i)تبلیغات\s*[|:]"),
     re.compile(r"(?i)آدرس\s+عضویت"),
+    re.compile(r"(?i)^\s*join\s+us\s*$"),
+    re.compile(r"(?i)^\s*follow\s+us\s*$"),
+    re.compile(r"(?i)^\s*subscribe\s*(?:now)?\s*$"),
+    re.compile(r"(?i)^\s*click\s+here\s*$"),
+    re.compile(r"(?i)^\s*read\s+more\s*$"),
+    re.compile(r"(?i)^\s*our\s+channel\s*$"),
 ]
 
 LABEL_PATTERNS = {
@@ -92,33 +98,27 @@ def strip_source_links_and_branding(text: str) -> str:
             continue
         if any(p.search(cleaned) for p in PROMO_LINE_PATTERNS):
             continue
+        if re.fullmatch(r"(?i)(?:join|follow|subscribe|channel|telegram|source)\s*(?:us|now)?[!\s]*", cleaned):
+            continue
         kept.append(line)
     return "\n".join(kept)
 
 
-def _merge_emoji_header_lines(text: str) -> str:
-    """Join a standalone emoji marker to the following text line."""
-    output: list[str] = []
-    pending_emoji: list[str] = []
+def _remove_orphan_emoji_lines(text: str) -> str:
+    """Drop emoji-only lines left behind by source-channel buttons/footers.
 
+    Meaningful emoji that is on the same line as actual news text is preserved.
+    """
+    output: list[str] = []
     for raw_line in text.splitlines():
         line = raw_line.strip()
+        if line and EMOJI_CLUSTER_RE.fullmatch(line):
+            continue
         if not line:
-            if pending_emoji:
-                continue
             if output and output[-1] != "":
                 output.append("")
             continue
-
-        if EMOJI_CLUSTER_RE.fullmatch(line):
-            pending_emoji.append(line)
-            continue
-
-        if pending_emoji:
-            line = f"{' '.join(pending_emoji)} {line}"
-            pending_emoji.clear()
         output.append(line)
-
     return "\n".join(output)
 
 
@@ -141,7 +141,7 @@ def clean_text(text: str) -> str:
     text = html.unescape(text or "")
     text = _normalize_chars(text)
     text = EMOJI_TOKEN_RE.sub("", text)
-    text = _merge_emoji_header_lines(text)
+    text = _remove_orphan_emoji_lines(text)
     text = strip_source_links_and_branding(text)
     text = CHANNEL_JUNK_RE.sub("", text)
     text = TELEGRAM_SEARCH_JUNK_RE.sub("", text)
