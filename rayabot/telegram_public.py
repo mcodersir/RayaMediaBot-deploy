@@ -72,6 +72,17 @@ class TelegramPublicReader:
 
             text_node = node.select_one(".tgme_widget_message_text")
             text = text_node.get_text("\n", strip=True) if text_node else ""
+            # Preserve hidden/anchored URLs for moderation. clean_text() removes
+            # them before publishing, but moderation can still catch betting,
+            # bot and advertising links that are not visible in the caption.
+            hidden_links: list[str] = []
+            if text_node:
+                for anchor in text_node.select("a[href]"):
+                    href = html.unescape((anchor.get("href") or "").strip())
+                    if href and href not in hidden_links:
+                        hidden_links.append(href)
+            if hidden_links:
+                text = "\n".join([text, *hidden_links]).strip()
 
             media: list[MediaItem] = []
             seen_urls: set[str] = set()
