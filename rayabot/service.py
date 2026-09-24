@@ -255,11 +255,23 @@ class RayaMediaService:
         if not self._summary_due():
             return
         now = datetime.now(timezone.utc)
-        items = self.storage.latest_published(self.cfg.summary_item_count)
+        items = self.storage.latest_published(max(self.cfg.summary_item_count * 4, 30))
+        # Historical rows may contain ads that slipped through an older filter.
+        # Never let those reappear in an automatic digest.
+        items = [
+            item for item in items
+            if moderate(
+                item.get("clean_text", ""),
+                skip_profanity=False,
+                skip_incitement=False,
+                skip_advertisements=True,
+                skip_non_news=True,
+            ).allowed
+        ][: self.cfg.summary_item_count]
         if items:
             items.reverse()  # chronological order inside the digest
             self.bale.send_text(self.cfg.target_bale_channel, build_digest(items))
-            log.info("Published local digest for %s items", len(items))
+            log.info("Published ad-safe local digest for %s items", len(items))
         self.storage.set_state("last_digest_at", now.isoformat())
 
     def run_forever(self) -> None:
