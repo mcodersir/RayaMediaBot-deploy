@@ -51,8 +51,19 @@ CTA_PHRASES = (
 COMMERCIAL_PHRASES = (
     "خرید", "فروش", "تخفیف", "قیمت ویژه", "اشتراک", "اکانت", "فیلترشکن",
     "vpn", "قرعه کشی", "قرعه‌کشی", "جایزه", "درآمد تضمینی",
-    "سرمایه گذاری تضمینی", "سرمایه‌گذاری تضمینی",
+    "سرمایه گذاری تضمینی", "سرمایه‌گذاری تضمینی", "کانفیگ", "کانفینگ",
+    "پشتیبانی", "تضمین", "ضمانت", "سرویس ویژه", "سرویس اختصاصی",
+    "تک کاربر", "دو کاربر", "سه کاربر", "نامحدود", "ip ثابت",
+    "آی پی ثابت", "آی‌پی ثابت", "گیگ", "گیگابایت",
 )
+SERVICE_SALE_PHRASES = (
+    "کانفیگ", "کانفینگ", "فیلترشکن", "vpn", "پروکسی", "سرور",
+    "سرویس", "اشتراک", "اکانت", "گیگ", "گیگابایت", "تک کاربر",
+    "دو کاربر", "سه کاربر", "نامحدود", "ip ثابت", "آی پی ثابت",
+    "پشتیبانی", "تضمین", "ضمانت",
+)
+PRICE_RE = re.compile(r"(?i)(?:[۰-۹0-9][۰-۹0-9,.٬]*\s*(?:هزار\s*)?تومان|تومان\s*[۰-۹0-9])")
+PRICE_LIST_RE = re.compile(r"(?:[۰-۹0-9][۰-۹0-9,.٬]*\s*(?:هزار\s*)?تومان.*?){2,}", re.I | re.S)
 GAMBLING_PHRASES = (
     "شرط بندی", "شرط‌بندی", "پیش بینی فوتبال", "پیش‌بینی فوتبال",
     "پیش بینی بازی", "پیش‌بینی بازی", "کازینو", "ضریب بازی", "ضریب برد",
@@ -85,6 +96,7 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     explicit = hit(normalized, EXPLICIT_AD_PHRASES)
     cta = hit(normalized, CTA_PHRASES)
     commercial = hit(normalized, COMMERCIAL_PHRASES)
+    service_sale = hit(normalized, SERVICE_SALE_PHRASES)
     gambling = hit(normalized, GAMBLING_PHRASES)
     sports_bait = hit(normalized, SPORTS_BAIT_PHRASES)
     sports_terms = hit(normalized, SPORTS_TERMS)
@@ -92,6 +104,8 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     has_bot = BOT_HANDLE_RE.search(raw) is not None
     link_count = len(LINK_RE.findall(raw))
     gambling_link = GAMBLING_LINK_RE.search(raw) is not None
+    price_count = len(PRICE_RE.findall(normalized))
+    price_list = PRICE_LIST_RE.search(normalized) is not None
 
     if explicit:
         score = max(score, 90)
@@ -102,7 +116,15 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     if cta:
         score += min(35, 15 + 5 * len(cta))
     if commercial:
-        score += min(30, 10 + 5 * len(commercial))
+        score += min(40, 10 + 6 * len(commercial))
+    if service_sale and price_count:
+        score = max(score, 95)
+    if len(set(service_sale)) >= 3:
+        score = max(score, 90)
+    if price_list or price_count >= 2:
+        score = max(score, 92)
+    if price_count:
+        score += min(30, 10 * price_count)
     if link_count:
         score += min(20, 10 + 5 * min(link_count, 2))
     if lexicon:
@@ -114,7 +136,9 @@ def _advertisement_score(raw: str, normalized: str) -> int:
         # betting/promo post rather than a news item.
         score = max(score, 90)
     if commercial and cta:
-        score = max(score, 85)
+        score = max(score, 90)
+    if has_bot and (service_sale or price_count):
+        score = 100
     return min(100, score)
 
 
