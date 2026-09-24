@@ -185,3 +185,16 @@ class Storage:
     def list_disabled_channels(self) -> list[str]:
         with self._conn() as conn:
             return [str(r[0]) for r in conn.execute("SELECT channel FROM disabled_channels ORDER BY channel").fetchall()]
+
+    def is_paused(self) -> bool:
+        return (self.get_state("publishing_paused") or "0") == "1"
+
+    def set_paused(self, paused: bool) -> None:
+        self.set_state("publishing_paused", "1" if paused else "0")
+
+    def status_counts(self) -> dict[str, int]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS n FROM posts GROUP BY status ORDER BY n DESC"
+            ).fetchall()
+            return {str(row["status"]): int(row["n"]) for row in rows}
