@@ -29,7 +29,10 @@ INSULTS = load("insult_patterns.json", [])
 RISK = load("risk_terms.json", [])
 
 BOT_HANDLE_RE = re.compile(r"(?i)(?:@|(?:https?://)?t\.me/)[A-Za-z0-9_]{3,64}bot\b")
-LINK_RE = re.compile(r"(?i)(?:https?://|www\.|t\.me/|ble\.ir/|bale\.ai/)")
+LINK_RE = re.compile(r"(?i)(?:https?://|www\.|t\.me/|tg://|ble\.ir/|bale\.ai/)")
+GAMBLING_LINK_RE = re.compile(
+    r"(?i)(?:https?://|www\.|t\.me/|tg://|@)[^\s]*(?:marcbet|markbet|1xbet|melbet|betwinner|22bet|bet365|parimatch|casino|sportsbet|bet)[^\s]*"
+)
 
 EXPLICIT_AD_PHRASES = (
     "تبلیغات", "آگهی", "اسپانسر", "رپورتاژ", "کد تخفیف",
@@ -39,13 +42,26 @@ CTA_PHRASES = (
     "عضو شوید", "عضو شو", "عضویت", "ثبت نام", "ثبت‌نام", "کلیک کنید",
     "کلیک کن", "سفارش دهید", "سفارش بده", "برای خرید", "خرید کنید",
     "خرید کن", "دایرکت", "پیام دهید", "پیام بدهید", "لینک ورود",
-    "لینک عضویت", "همین حالا بخرید",
+    "لینک عضویت", "همین حالا بخرید", "وارد سایت", "ورود به سایت",
 )
 COMMERCIAL_PHRASES = (
     "خرید", "فروش", "تخفیف", "قیمت ویژه", "اشتراک", "اکانت", "فیلترشکن",
-    "vpn", "قرعه کشی", "قرعه‌کشی", "جایزه", "پیش بینی فوتبال",
-    "پیش‌بینی فوتبال", "شرط بندی", "شرط‌بندی", "کازینو", "درآمد تضمینی",
+    "vpn", "قرعه کشی", "قرعه‌کشی", "جایزه", "درآمد تضمینی",
     "سرمایه گذاری تضمینی", "سرمایه‌گذاری تضمینی",
+)
+GAMBLING_PHRASES = (
+    "شرط بندی", "شرط‌بندی", "پیش بینی فوتبال", "پیش‌بینی فوتبال",
+    "پیش بینی بازی", "پیش‌بینی بازی", "کازینو", "ضریب بازی", "ضریب برد",
+    "برد تضمینی", "marcbet", "markbet", "1xbet", "melbet", "betwinner",
+    "22bet", "bet365", "parimatch",
+)
+SPORTS_BAIT_PHRASES = (
+    "این بازی فقط", "بزن بریم", "کی می بره", "کی می‌بره",
+    "می برن یا", "می‌برن یا", "پیش بینی کن", "پیش‌بینی کن",
+)
+SPORTS_TERMS = (
+    "فوتبال", "بازی", "تیم", "گل", "برد", "باخت", "مساوی",
+    "لیگ", "جام", "بازیکن", "مربی",
 )
 
 
@@ -65,12 +81,18 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     explicit = hit(normalized, EXPLICIT_AD_PHRASES)
     cta = hit(normalized, CTA_PHRASES)
     commercial = hit(normalized, COMMERCIAL_PHRASES)
+    gambling = hit(normalized, GAMBLING_PHRASES)
+    sports_bait = hit(normalized, SPORTS_BAIT_PHRASES)
+    sports_terms = hit(normalized, SPORTS_TERMS)
     lexicon = list(dict.fromkeys(hit(normalized, ADS)))
     has_bot = BOT_HANDLE_RE.search(raw) is not None
     link_count = len(LINK_RE.findall(raw))
+    gambling_link = GAMBLING_LINK_RE.search(raw) is not None
 
     if explicit:
         score = max(score, 90)
+    if gambling or gambling_link:
+        score = max(score, 100)
     if has_bot:
         score += 55
     if cta:
@@ -83,8 +105,10 @@ def _advertisement_score(raw: str, normalized: str) -> int:
         score += min(30, 10 + 5 * len(lexicon))
     if has_bot and (cta or commercial or link_count):
         score = max(score, 90)
-    if "عضویت" in normalized and ("پیش بینی فوتبال" in normalized or "پیش‌بینی فوتبال" in normalized):
-        score = max(score, 100)
+    if sports_bait and len(set(sports_terms)) >= 2:
+        # Sports engagement bait from news sources is commonly an embedded
+        # betting/promo post rather than a news item.
+        score = max(score, 90)
     if commercial and cta:
         score = max(score, 85)
     return min(100, score)
