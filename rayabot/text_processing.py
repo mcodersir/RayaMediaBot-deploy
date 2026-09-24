@@ -122,15 +122,18 @@ def _merge_emoji_header_lines(text: str) -> str:
     return "\n".join(output)
 
 
-def _collapse_soft_linebreaks(text: str) -> str:
-    """Keep paragraph breaks but remove source-induced mid-sentence newlines."""
+def _format_paragraphs(text: str) -> str:
+    """Preserve source paragraphs and create a readable Bale news layout."""
     text = MULTIBLANK_RE.sub("\n\n", text)
-    paragraphs = []
-    for part in text.split("\n\n"):
-        compact = re.sub(r"\s*\n\s*", " ", part)
-        compact = MULTISPACE_RE.sub(" ", compact).strip()
-        if compact:
-            paragraphs.append(compact)
+    raw_parts = [part.strip() for part in text.split("\n\n") if part.strip()]
+    paragraphs: list[str] = []
+    for part in raw_parts:
+        lines = [MULTISPACE_RE.sub(" ", line).strip() for line in part.splitlines() if line.strip()]
+        if not lines:
+            continue
+        # A real Telegram <br> is meaningful. Keep it as a paragraph boundary
+        # instead of flattening the entire post into one dense block.
+        paragraphs.extend(lines)
     return "\n\n".join(paragraphs)
 
 
@@ -147,7 +150,7 @@ def clean_text(text: str) -> str:
     text = re.sub(r"(?m)^\s*:\s*", "", text)
     text = re.sub(r"([،,:])\s*\n\s*", r"\1 ", text)
     text = re.sub(r"\s+:", ":", text)
-    text = _collapse_soft_linebreaks(text)
+    text = _format_paragraphs(text)
     return text.strip(" \n|｜—-•")
 
 
@@ -159,7 +162,7 @@ def apply_news_label(text: str, label: str) -> str:
         body = pattern.sub("", body).lstrip(" |｜:：-—–")
     if not body:
         return f"#{label}"
-    return f"#{label} | {body}"
+    return f"#{label}\n\n{body}"
 
 
 def content_hash(text: str) -> str:
@@ -169,4 +172,4 @@ def content_hash(text: str) -> str:
 
 def append_footer(text: str, category: str) -> str:
     footer = f"صدای رسای امید و آگاهی، رایا مدیا:\n@rayamedia | #{category}"
-    return f"{text.rstrip()}\n\n{footer}" if text.strip() else footer
+    return f"{text.rstrip()}\n\n\n{footer}" if text.strip() else footer
