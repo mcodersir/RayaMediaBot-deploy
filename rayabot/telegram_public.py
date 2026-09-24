@@ -5,7 +5,7 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 import requests
 from bs4 import BeautifulSoup
@@ -79,6 +79,14 @@ class TelegramPublicReader:
             if text_node:
                 for anchor in text_node.select("a[href]"):
                     href = html.unescape((anchor.get("href") or "").strip())
+                    # Telegram uses href="?q=%23Tag" for clickable hashtags.
+                    # Those are UI search links, not source URLs and must never
+                    # leak into the news body or moderation payload.
+                    decoded = unquote(href)
+                    if href.startswith("?q=") or decoded.startswith("?q=#"):
+                        continue
+                    if href.startswith("#"):
+                        continue
                     if href and href not in hidden_links:
                         hidden_links.append(href)
             if hidden_links:
