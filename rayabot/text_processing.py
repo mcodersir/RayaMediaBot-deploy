@@ -32,6 +32,11 @@ EMOJI_CLUSTER_RE = re.compile(
     r"^(?:[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D\u200B\u20E3\U0001F3FB-\U0001F3FF]|\s)+$"
 )
 EMOJI_TOKEN_RE = re.compile(r"(?:\[[^\]]+\]\([^\)]+\)|:[a-zA-Z0-9_]+:)")
+BULLET_EMOJIS = "🔴🟠🟡🟢🔵🟣⚫⚪🟥🟧🟨🟩🟦🟪✅☑❌🚨🔺🔻📌"
+BULLET_RE = re.compile(f"([{re.escape(BULLET_EMOJIS)}])")
+INLINE_CTA_RE = re.compile(
+    r"(?i)\b(?:join\s+us|follow\s+us|subscribe(?:\s+now)?|click\s+here|read\s+more|our\s+channel)\b[!！.。…\s]*"
+)
 
 PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)کانال\s+خبر\s+فوری"),
@@ -104,21 +109,56 @@ def strip_source_links_and_branding(text: str) -> str:
     return "\n".join(kept)
 
 
-def _remove_orphan_emoji_lines(text: str) -> str:
-    """Drop emoji-only lines left behind by source-channel buttons/footers.
+def _cleanup_source_residue(text: str) -> str:
+    """Remove source-channel CTA residue after links/handles are stripped."""
+    text = INLINE_CTA_RE.sub("", text)
+    text = re.sub(r"(?im)^\s*(?:join|follow|subscribe|channel|telegram|source)\s*(?:us|now)?[!！.。…\s]*$", "", text)
+    text = re.sub(r"(?im)^\s*(?:عضویت|ورود|لینک عضویت|کانال ما|منبع)\s*$", "", text)
+    return text
 
-    Meaningful emoji that is on the same line as actual news text is preserved.
-    """
+
+def _structure_bullets(text: str) -> str:
+    """Turn inline source bullet emojis into proper paragraphs and remove orphans."""
+    # A bullet embedded in the middle of a sentence starts a new paragraph.
+    text = re.sub(
+        f"(?<=\\S)\\s*([{re.escape(BULLET_EMOJIS)}])\\s*(?=\\S)",
+        r"\n\n\1 ",
+        text,
+    )
+
+    lines = text.splitlines()
     output: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if line and EMOJI_CLUSTER_RE.fullmatch(line):
-            continue
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
         if not line:
             if output and output[-1] != "":
                 output.append("")
+            i += 1
             continue
-        output.append(line)
+
+        # Source-channel buttons frequently leave a bare emoji after the URL is removed.
+        if EMOJI_CLUSTER_RE.fullmatch(line):
+            bullet_match = BULLET_RE.fullmatch(line.replace("\ufe0f", ""))
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if bullet_match and j < len(lines):
+                nxt = lines[j].strip()
+                # Keep only when there is actual following news text; otherwise drop it.
+                if nxt and not EMOJI_CLUSTER_RE.fullmatch(nxt) and len(re.sub(r"\W+", "", nxt, flags=re.UNICODE)) >= 6:
+                    output.append(f"{line} {nxt}")
+                    i = j + 1
+                    continue
+            i += 1
+            continue
+
+        # A trailing bullet with no words after it is residue.
+        line = re.sub(f"\\s*([{re.escape(BULLET_EMOJIS)}])\\s*$", "", line).strip()
+        if line:
+            output.append(line)
+        i += 1
+
     return "\n".join(output)
 
 
@@ -141,16 +181,21 @@ def clean_text(text: str) -> str:
     text = html.unescape(text or "")
     text = _normalize_chars(text)
     text = EMOJI_TOKEN_RE.sub("", text)
-    text = _remove_orphan_emoji_lines(text)
     text = strip_source_links_and_branding(text)
+    text = _cleanup_source_residue(text)
     text = CHANNEL_JUNK_RE.sub("", text)
     text = TELEGRAM_SEARCH_JUNK_RE.sub("", text)
+    text = _structure_bullets(text)
     text = normalize_political_terms(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"(?m)^\s*:\s*", "", text)
     text = re.sub(r"([،,:])\s*\n\s*", r"\1 ", text)
     text = re.sub(r"\s+:", ":", text)
     text = _format_paragraphs(text)
+    # Final pass catches CTA/emoji residue revealed only after whitespace cleanup.
+    text = _cleanup_source_residue(text)
+    text = _structure_bullets(text)
+    text = MULTIBLANK_RE.sub("\n\n", text)
     return text.strip(" \n|｜—-•")
 
 
