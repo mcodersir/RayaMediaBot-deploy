@@ -10,24 +10,24 @@ SOURCE_HANDLES = {
     "moghavematkhabar",
     "khabarfuri",
     "naya_press",
-    "BazChiShod",
+    "bazchishod",
     "alonews",
     "squad_iran",
-    "Iranian_Militarism",
+    "iranian_militarism",
 }
 
 TELEGRAM_LINK_RE = re.compile(
     r"(?i)(?:https?://)?(?:t\.me|telegram\.me)/(?:\+?[A-Za-z0-9_\-]+)(?:/\d+)?(?:\?[^\s]*)?"
 )
+GENERIC_URL_RE = re.compile(r"(?i)(?:https?://|www\.|tg://)\S+")
 HANDLE_RE = re.compile(r"(?<!\w)@([A-Za-z0-9_]{3,64})")
 MULTISPACE_RE = re.compile(r"[ \t\u200c\u200f]+")
 MULTIBLANK_RE = re.compile(r"\n{3,}")
 CHANNEL_JUNK_RE = re.compile(r"(?im)^\s*[|｜]\s*(اخبار|news|خبرها)\s*$")
-EMOJI_CLUSTER_RE = re.compile(r"^(?:[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D\u200B\u20E3\U0001F3FB-\U0001F3FF]|\s)+")
-
-# Telegram channel headers often contain only emoji markers. They are source decorations, not news.
+EMOJI_CLUSTER_RE = re.compile(
+    r"^(?:[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D\u200B\u20E3\U0001F3FB-\U0001F3FF]|\s)+$"
+)
 EMOJI_TOKEN_RE = re.compile(r"(?:\[[^\]]+\]\([^\)]+\)|:[a-zA-Z0-9_]+:)")
-
 
 PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)کانال\s+خبر\s+فوری"),
@@ -36,6 +36,12 @@ PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)تبلیغات\s*[|:]"),
     re.compile(r"(?i)آدرس\s+عضویت"),
 ]
+
+LABEL_PATTERNS = {
+    "فوری": re.compile(r"^(?:(?:#\s*)?فوری\s*(?:[|｜:：\-—–]\s*)?)+", re.I),
+    "تحلیل": re.compile(r"^(?:(?:#\s*)?تحلیل\s*(?:[|｜:：\-—–]\s*)?)+", re.I),
+    "تکمیلی": re.compile(r"^(?:(?:#\s*)?تکمیلی\s*(?:[|｜:：\-—–]\s*)?)+", re.I),
+}
 
 
 def _normalize_chars(text: str) -> str:
@@ -54,9 +60,7 @@ def _normalize_chars(text: str) -> str:
 
 
 def normalize_political_terms(text: str) -> str:
-    # Normalize abbreviated forms such as ج.ا / ج ا / ج‌.ا to the requested full form.
     text = re.sub(r"(?<!\w)ج\s*[\.\-ـ‌]?\s*ا(?:\s*[\.\-ـ‌]?\s*ا)?(?!\w)", "جمهوری اسلامی ایران", text)
-    # Avoid producing "جمهوری اسلامی ایران ایران" when already complete.
     text = re.sub(r"جمهوری\s+اسلامی(?!\s+ایران)", "جمهوری اسلامی ایران", text)
     text = re.sub(r"جمهوری\s+اسلامی\s+ایران\s+ایران", "جمهوری اسلامی ایران", text)
     return text
@@ -64,11 +68,10 @@ def normalize_political_terms(text: str) -> str:
 
 def strip_source_links_and_branding(text: str) -> str:
     text = TELEGRAM_LINK_RE.sub("", text)
+    text = GENERIC_URL_RE.sub("", text)
 
     def handle_repl(match: re.Match[str]) -> str:
         handle = match.group(1).lower()
-        # Incoming Telegram usernames are treated as source/channel promotion and removed.
-        # The Raya Media footer is appended later by append_footer().
         return match.group(0) if handle == "rayamedia" else ""
 
     text = HANDLE_RE.sub(handle_repl, text)
@@ -88,30 +91,69 @@ def strip_source_links_and_branding(text: str) -> str:
     return "\n".join(kept)
 
 
+def _merge_emoji_header_lines(text: str) -> str:
+    """Join a standalone emoji marker to the following text line."""
+    output: list[str] = []
+    pending_emoji: list[str] = []
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if pending_emoji:
+                continue
+            if output and output[-1] != "":
+                output.append("")
+            continue
+
+        if EMOJI_CLUSTER_RE.fullmatch(line):
+            pending_emoji.append(line)
+            continue
+
+        if pending_emoji:
+            line = f"{' '.join(pending_emoji)} {line}"
+            pending_emoji.clear()
+        output.append(line)
+
+    return "\n".join(output)
+
+
+def _collapse_soft_linebreaks(text: str) -> str:
+    """Keep paragraph breaks but remove source-induced mid-sentence newlines."""
+    text = MULTIBLANK_RE.sub("\n\n", text)
+    paragraphs = []
+    for part in text.split("\n\n"):
+        compact = re.sub(r"\s*\n\s*", " ", part)
+        compact = MULTISPACE_RE.sub(" ", compact).strip()
+        if compact:
+            paragraphs.append(compact)
+    return "\n\n".join(paragraphs)
+
+
 def clean_text(text: str) -> str:
     text = html.unescape(text or "")
     text = _normalize_chars(text)
-    text = strip_source_links_and_branding(text)
-    # Remove Telegram/Bale markdown emoji links and reaction headers.
     text = EMOJI_TOKEN_RE.sub("", text)
-    # Remove standalone reaction/header emoji clusters that appear before news titles.
-    text = re.sub(r"(?m)^\s*[〰️~•·▪️◾️◽️]+\s*", "", text)
-    lines = []
-    for line in text.splitlines():
-        if len(EMOJI_CLUSTER_RE.sub("", line).strip()) == 0:
-            continue
-        lines.append(line)
-    text = "\n".join(lines)
+    text = _merge_emoji_header_lines(text)
+    text = strip_source_links_and_branding(text)
     text = CHANNEL_JUNK_RE.sub("", text)
     text = normalize_political_terms(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = MULTISPACE_RE.sub(" ", text)
-    text = re.sub(r" *\n *", "\n", text)
-    text = MULTIBLANK_RE.sub("\n\n", text)
     text = re.sub(r"(?m)^\s*:\s*", "", text)
     text = re.sub(r"([،,:])\s*\n\s*", r"\1 ", text)
     text = re.sub(r"\s+:", ":", text)
-    return text.strip(" \n|—-•")
+    text = _collapse_soft_linebreaks(text)
+    return text.strip(" \n|｜—-•")
+
+
+def apply_news_label(text: str, label: str) -> str:
+    """Guarantee exactly one leading label and keep it on the news text line."""
+    body = (text or "").strip()
+    pattern = LABEL_PATTERNS.get(label)
+    if pattern:
+        body = pattern.sub("", body).lstrip(" |｜:：-—–")
+    if not body:
+        return f"#{label}"
+    return f"#{label} | {body}"
 
 
 def content_hash(text: str) -> str:
