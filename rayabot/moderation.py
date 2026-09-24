@@ -27,6 +27,10 @@ def load(name: str, default: list[str]) -> list[str]:
 ADS = load("ads_patterns.json", [])
 INSULTS = load("insult_patterns.json", [])
 RISK = load("risk_terms.json", [])
+try:
+    NEWS_SIGNALS = json.loads((BASE / "news_signals.json").read_text(encoding="utf-8"))
+except Exception:
+    NEWS_SIGNALS = {"strong_news": [], "news_style": [], "non_news": [], "engagement_bait": []}
 
 BOT_HANDLE_RE = re.compile(r"(?i)(?:@|(?:https?://)?t\.me/)[A-Za-z0-9_]{3,64}bot\b")
 LINK_RE = re.compile(r"(?i)(?:https?://|www\.|t\.me/|tg://|ble\.ir/|bale\.ai/)")
@@ -114,6 +118,41 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     return min(100, score)
 
 
+def news_likelihood(text: str) -> tuple[int, str | None]:
+    """Conservative local news-vs-noise classifier.
+
+    It rejects obvious social/engagement filler while allowing short breaking
+    headlines. Political names and viewpoints are intentionally not used as
+    positive or negative signals.
+    """
+    normalized = normalize(text)
+    if not normalized:
+        return 0, "empty"
+
+    strong = hit(normalized, NEWS_SIGNALS.get("strong_news", []))
+    style = hit(normalized, NEWS_SIGNALS.get("news_style", []))
+    non_news = hit(normalized, NEWS_SIGNALS.get("non_news", []))
+    bait = hit(normalized, NEWS_SIGNALS.get("engagement_bait", []))
+
+    score = 35
+    score += min(45, 18 * len(set(strong)))
+    score += min(25, 10 * len(set(style)))
+    if re.search(r"[۰-۹0-9]", normalized):
+        score += 5
+    if len(normalized) >= 55:
+        score += 8
+    if len(normalized) >= 120:
+        score += 5
+    score -= min(60, 25 * len(set(non_news)))
+    score -= min(45, 20 * len(set(bait)))
+
+    # A short factual breaking headline can still be valid news.
+    if strong and len(normalized) >= 18:
+        score = max(score, 62)
+    score = max(0, min(100, score))
+    return score, None if score >= 48 else "non_news"
+
+
 def moderate(text: str, **options: bool) -> ModerationResult:
     raw = text or ""
     normalized = normalize(raw)
@@ -143,6 +182,11 @@ def moderate(text: str, **options: bool) -> ModerationResult:
         category_scores.append(risk_score)
         if risk_score >= 80:
             reasons.append("risk")
+
+    news_score, news_reason = news_likelihood(raw)
+    category_scores.append(100 - news_score)
+    if options.get("skip_non_news", True) and news_reason:
+        reasons.append(news_reason)
 
     score = max(category_scores, default=0)
     return ModerationResult(not reasons, ",".join(reasons) or None, score)
