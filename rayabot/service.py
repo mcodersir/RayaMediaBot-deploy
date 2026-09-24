@@ -131,8 +131,22 @@ class RayaMediaService:
             )
 
             cleaned = clean_text(post.text)
+            # Defense in depth: re-check the publishable text too. This catches
+            # commercial payloads even if Telegram changes link/HTML markup.
+            cleaned_moderation = moderate(
+                cleaned,
+                skip_profanity=self.cfg.skip_profanity,
+                skip_incitement=self.cfg.skip_incitement,
+                skip_advertisements=self.cfg.skip_advertisements,
+                skip_non_news=True,
+            )
+            if moderation.allowed and not cleaned_moderation.allowed:
+                moderation = cleaned_moderation
             category = classify(cleaned)
             digest_hash = content_hash(cleaned)
+            if len(cleaned.strip()) < 18:
+                self.storage.save_post(channel=channel, post_id=post.post_id, source_url=post.url, original_text=post.text, clean_text=cleaned, category=category, content_hash=digest_hash, status="filtered:empty_or_short", published=False)
+                continue
             if self.storage.has_content_hash(digest_hash):
                 log.info("Skipped exact duplicate @%s/%s", channel, post.post_id)
                 self.storage.save_post(channel=channel, post_id=post.post_id, source_url=post.url, original_text=post.text, clean_text=cleaned, category=category, content_hash=digest_hash, status="duplicate", published=False)
