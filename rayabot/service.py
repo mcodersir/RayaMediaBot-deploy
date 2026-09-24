@@ -79,12 +79,18 @@ class RayaMediaService:
 
             # Reworded reports of the same event often have a modest sequence
             # ratio but retain the same names, places and event vocabulary.
-            if jaccard >= 0.58:
+            if jaccard >= 0.50 and len(intersection) >= 4:
                 return True
-            if containment >= 0.72 and len(intersection) >= 5:
+            if containment >= 0.66 and len(intersection) >= 4:
                 return True
-            if sequence_ratio >= 0.72 and containment >= 0.62:
+            if sequence_ratio >= 0.68 and containment >= 0.56:
                 return True
+
+            # Short breaking-news rewrites often differ mainly in attribution
+            # or wording while preserving the event's distinctive vocabulary.
+            if len(candidate_tokens) <= 18 and len(old_tokens) <= 18:
+                if containment >= 0.60 and len(intersection) >= 3:
+                    return True
         return False
 
     def _smart_label(self, text: str) -> str:
