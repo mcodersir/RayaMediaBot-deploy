@@ -54,6 +54,14 @@ class Storage:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS dynamic_channels (
+                    channel TEXT PRIMARY KEY
+                );
+
+                CREATE TABLE IF NOT EXISTS disabled_channels (
+                    channel TEXT PRIMARY KEY
+                );
                 """
             )
 
@@ -160,18 +168,20 @@ class Storage:
                 (key, value),
             )
 
-# dynamic source management
-def _add_channel(self, channel: str):
-    with self._conn() as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS dynamic_channels(channel TEXT PRIMARY KEY)')
-        conn.execute('INSERT OR IGNORE INTO dynamic_channels(channel) VALUES (?)',(channel,))
-def _remove_channel(self, channel: str):
-    with self._conn() as conn:
-        conn.execute('DELETE FROM dynamic_channels WHERE channel=?',(channel,))
-def _list_channels(self):
-    with self._conn() as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS dynamic_channels(channel TEXT PRIMARY KEY)')
-        return [r[0] for r in conn.execute('SELECT channel FROM dynamic_channels').fetchall()]
-Storage.add_channel=_add_channel
-Storage.remove_channel=_remove_channel
-Storage.list_channels=_list_channels
+    def add_channel(self, channel: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM disabled_channels WHERE channel=?", (channel,))
+            conn.execute("INSERT OR IGNORE INTO dynamic_channels(channel) VALUES (?)", (channel,))
+
+    def remove_channel(self, channel: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM dynamic_channels WHERE channel=?", (channel,))
+            conn.execute("INSERT OR IGNORE INTO disabled_channels(channel) VALUES (?)", (channel,))
+
+    def list_channels(self) -> list[str]:
+        with self._conn() as conn:
+            return [str(r[0]) for r in conn.execute("SELECT channel FROM dynamic_channels ORDER BY channel").fetchall()]
+
+    def list_disabled_channels(self) -> list[str]:
+        with self._conn() as conn:
+            return [str(r[0]) for r in conn.execute("SELECT channel FROM disabled_channels ORDER BY channel").fetchall()]
