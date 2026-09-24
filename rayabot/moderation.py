@@ -79,6 +79,27 @@ SPORTS_TERMS = (
     "لیگ", "جام", "بازیکن", "مربی",
 )
 
+GAMBLING_PROMO_PHRASES = (
+    "سایت بت", "ژتون بت", "فری بت", "freebet", "بونوس", "شارژ حساب",
+    "شارژ از طریق", "تسویه حساب", "برداشت آنی", "برداشت سریع",
+    "واریز اول", "واریز اولیه", "بدون احراز هویت", "ضریب بالا",
+    "پیش بینی آنلاین", "پیش‌بینی آنلاین", "کازینو آنلاین",
+    "شرطبندی", "شرط بندی", "شرط‌بندی",
+)
+VPN_PROMO_PHRASES = (
+    "فیلتر شکن", "فیلترشکن", "v2ray", "vless", "vmess", "wireguard",
+    "openvpn", "hiddify", "outline", "کانفیگ", "کانفینگ",
+    "سرور اختصاصی", "آی پی ثابت", "آی‌پی ثابت", "ip ثابت",
+    "تک کاربر", "دو کاربر", "سه کاربر", "نامحدود",
+)
+TRANSACTION_PHRASES = (
+    "خرید", "فروش", "سفارش", "ثبت سفارش", "قیمت", "تومان", "اشتراک",
+    "اکانت", "تمدید", "پشتیبانی", "ضمانت", "تضمین", "واریز", "شارژ",
+    "پرداخت", "کارت بانکی", "درگاه", "هدیه", "تخفیف", "بونوس",
+)
+PERCENT_RE = re.compile(r"[۰-۹0-9]+\s*%")
+
+
 
 def normalize(text: str) -> str:
     text = (text or "").replace("ي", "ی").replace("ى", "ی").replace("ك", "ک")
@@ -100,17 +121,29 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     gambling = hit(normalized, GAMBLING_PHRASES)
     sports_bait = hit(normalized, SPORTS_BAIT_PHRASES)
     sports_terms = hit(normalized, SPORTS_TERMS)
+    gambling_promo = hit(normalized, GAMBLING_PROMO_PHRASES)
+    vpn_promo = hit(normalized, VPN_PROMO_PHRASES)
+    transaction = hit(normalized, TRANSACTION_PHRASES)
     lexicon = list(dict.fromkeys(hit(normalized, ADS)))
     has_bot = BOT_HANDLE_RE.search(raw) is not None
     link_count = len(LINK_RE.findall(raw))
     gambling_link = GAMBLING_LINK_RE.search(raw) is not None
     price_count = len(PRICE_RE.findall(normalized))
     price_list = PRICE_LIST_RE.search(normalized) is not None
+    percent_offer = PERCENT_RE.search(normalized) is not None
 
     if explicit:
         score = max(score, 90)
     if gambling or gambling_link:
         score = max(score, 100)
+    if gambling_promo and (transaction or percent_offer or has_bot or link_count):
+        score = 100
+    if len(set(gambling_promo)) >= 2:
+        score = 100
+    if vpn_promo and (transaction or price_count or has_bot or link_count):
+        score = 100
+    if len(set(vpn_promo)) >= 3:
+        score = 100
     if has_bot:
         score += 55
     if cta:
