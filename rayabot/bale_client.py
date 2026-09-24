@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -40,9 +41,18 @@ class BaleClient:
     def get_chat(self, chat_id: str) -> dict:
         return self._call("getChat", data={"chat_id": chat_id}).get("result", {})
 
+    def answer_callback_query(self, callback_query_id: str, text: str = "") -> None:
+        data = {"callback_query_id": callback_query_id}
+        if text:
+            data["text"] = text[:180]
+        self._call("answerCallbackQuery", data=data)
+
     def send_text(self, chat_id: str, text: str, markup=None) -> None:
         for chunk in self._split_text(text, max_chars=3800):
-            self._call("sendMessage", data={"chat_id": chat_id, "text": chunk, **({"reply_markup": __import__("json").dumps(markup, ensure_ascii=False)} if markup else {})})
+            data = {"chat_id": chat_id, "text": chunk}
+            if markup:
+                data["reply_markup"] = json.dumps(markup, ensure_ascii=False)
+            self._call("sendMessage", data=data)
 
     def send_media(self, chat_id: str, kind: str, path: Path, caption: str = "") -> None:
         method = "sendPhoto" if kind == "photo" else "sendVideo"
@@ -62,9 +72,7 @@ class BaleClient:
             with path.open("rb") as fh:
                 self._call("sendDocument", data=data, files={"document": (path.name, fh)})
 
-
     def send_media_group(self, chat_id: str, items: list[dict]) -> None:
-        import json
         self._call("sendMediaGroup", data={"chat_id": chat_id, "media": json.dumps(items, ensure_ascii=False)})
 
     @staticmethod
