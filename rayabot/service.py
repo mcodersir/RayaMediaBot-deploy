@@ -127,6 +127,7 @@ class RayaMediaService:
                 skip_profanity=self.cfg.skip_profanity,
                 skip_incitement=self.cfg.skip_incitement,
                 skip_advertisements=self.cfg.skip_advertisements,
+                skip_non_news=True,
             )
 
             cleaned = clean_text(post.text)
@@ -216,6 +217,10 @@ class RayaMediaService:
         log.info("RayaMedia bridge started. Sources: %s", ", ".join("@" + c for c in self.cfg.telegram_channels))
         while True:
             cycle_started = time.monotonic()
+            if self.storage.is_paused():
+                log.info("Publishing is paused by admin")
+                time.sleep(max(2.0, min(10.0, self.cfg.poll_seconds)))
+                continue
             dynamic_channels = self.storage.list_channels()
             disabled = {x.lower() for x in self.storage.list_disabled_channels()}
             channels = [
