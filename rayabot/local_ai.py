@@ -151,10 +151,20 @@ def analyze(text: str, *, summary_chars: int = 260) -> LocalAnalysis:
 
 
 def build_digest(items: list[dict]) -> str:
-    out = ["🧠 خلاصه هوشمند ۱۰ خبر اخیر", ""]
-    for i, item in enumerate(items[:10], 1):
-        analysis = analyze(item.get("clean_text", ""), summary_chars=240)
-        tags = " ".join(f"#{key}" for key in analysis.keywords[:3])
-        suffix = f"\nکلیدواژه: {tags}" if tags else ""
-        out.append(f"{i}) {analysis.summary}{suffix}")
+    selected = items[:10]
+    out = [f"🧠 جمع‌بندی هوشمند {len(selected)} خبر اخیر", ""]
+    combined: list[str] = []
+
+    for i, item in enumerate(selected, 1):
+        source_text = item.get("clean_text", "")
+        combined.append(source_text)
+        analysis = analyze(source_text, summary_chars=220)
+        category = item.get("category", "International")
+        out.append(f"{i}) {analysis.summary}\n#{category}")
+        if i != len(selected):
+            out.append("")
+
+    themes = extract_keywords(" ".join(combined), limit=5)
+    if themes:
+        out.extend(["", "محورهای پرتکرار: " + "، ".join(themes)])
     return "\n".join(out)
