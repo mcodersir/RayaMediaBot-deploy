@@ -100,7 +100,8 @@ class RayaMediaService:
                     media, path = downloaded[0]
                     self.bale.send_media(target, media.kind, path, caption=text[:1000])
             except Exception:
-                log.exception("Media transfer failed")
+                log.exception("Media transfer failed; falling back to text")
+                self.bale.send_text(target, text)
 
     def _process_channel(self, channel: str) -> None:
         posts = self.telegram.fetch_posts(channel)
@@ -119,6 +120,15 @@ class RayaMediaService:
             if self.storage.is_seen(channel, post.post_id):
                 continue
 
+            # Moderate the original post before cleaning. Cleaning removes source
+            # handles and links, which are valuable evidence for detecting ads/bots.
+            moderation = moderate(
+                post.text,
+                skip_profanity=self.cfg.skip_profanity,
+                skip_incitement=self.cfg.skip_incitement,
+                skip_advertisements=self.cfg.skip_advertisements,
+            )
+
             cleaned = clean_text(post.text)
             category = classify(cleaned)
             digest_hash = content_hash(cleaned)
@@ -126,13 +136,6 @@ class RayaMediaService:
                 log.info("Skipped exact duplicate @%s/%s", channel, post.post_id)
                 self.storage.save_post(channel=channel, post_id=post.post_id, source_url=post.url, original_text=post.text, clean_text=cleaned, category=category, content_hash=digest_hash, status="duplicate", published=False)
                 continue
-            moderation = moderate(
-                cleaned,
-                skip_profanity=self.cfg.skip_profanity,
-                skip_incitement=self.cfg.skip_incitement,
-                skip_advertisements=self.cfg.skip_advertisements,
-            )
-
             if not moderation.allowed:
                 log.info("Skipped @%s/%s: %s", channel, post.post_id, moderation.reason)
                 self.storage.save_post(
@@ -213,7 +216,9 @@ class RayaMediaService:
         log.info("RayaMedia bridge started. Sources: %s", ", ".join("@" + c for c in self.cfg.telegram_channels))
         while True:
             cycle_started = time.monotonic()
-            for channel in (self.storage.list_channels() or self.cfg.telegram_channels):
+            dynamic_channels = self.storage.list_channels()
+            channels = list(dict.fromkeys([*self.cfg.telegram_channels, *dynamic_channels]))
+            for channel in channels:
                 try:
                     self._process_channel(channel)
                 except Exception:
