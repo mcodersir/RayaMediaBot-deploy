@@ -89,7 +89,12 @@ def _rank_sentences(sentences: list[str]) -> list[tuple[float, int, str]]:
     ranked = []
     for i, (sentence, score) in enumerate(zip(sentences, scores)):
         length_prior = min(1.25, max(0.7, len(words(sentence)) / 14))
-        ranked.append((score * length_prior, i, sentence))
+        lead_prior = 1.22 if i == 0 else 1.10 if i == 1 else 1.0
+        factual_prior = 1.12 if re.search(r"[۰-۹0-9]", sentence) else 1.0
+        attribution_prior = 1.10 if any(
+            cue in sentence for cue in ("گفت", "اعلام", "گزارش", "تایید", "تأیید", "به نقل از")
+        ) else 1.0
+        ranked.append((score * length_prior * lead_prior * factual_prior * attribution_prior, i, sentence))
     return ranked
 
 
@@ -106,7 +111,7 @@ def textrank_summary(text: str, max_sentences: int = 3, max_chars: int = 260) ->
     result: list[str] = []
     used = 0
     for _, _, sentence in selected:
-        separator = " " if result else ""
+        separator = "\n" if result else ""
         if used + len(separator) + len(sentence) > max_chars:
             remaining = max_chars - used - len(separator)
             if remaining >= 24:
@@ -160,7 +165,8 @@ def build_digest(items: list[dict]) -> str:
         combined.append(source_text)
         analysis = analyze(source_text, summary_chars=220)
         category = item.get("category", "International")
-        out.append(f"{i}) {analysis.summary}\n#{category}")
+        summary = analysis.summary.strip()
+        out.append(f"{i}) {summary}\n#{category}")
         if i != len(selected):
             out.append("")
 
