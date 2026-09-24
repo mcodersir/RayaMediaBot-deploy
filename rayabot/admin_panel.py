@@ -5,6 +5,7 @@ import re
 
 from .bale_client import BaleApiError, BaleClient
 from .local_ai import build_digest
+from .moderation import moderate
 from .storage import Storage
 
 
@@ -147,9 +148,19 @@ class AdminPanel:
         self.client.send_text(cid, text)
 
     def _publish_summary(self, cid) -> None:
-        items = self.storage.latest_published(10)
+        items = self.storage.latest_published(40)
+        items = [
+            item for item in items
+            if moderate(
+                item.get("clean_text", ""),
+                skip_profanity=False,
+                skip_incitement=False,
+                skip_advertisements=True,
+                skip_non_news=True,
+            ).allowed
+        ][:10]
         if not items:
-            self.client.send_text(cid, "هنوز خبر کافی برای خلاصه‌سازی وجود ندارد.")
+            self.client.send_text(cid, "هنوز خبر سالم کافی برای خلاصه‌سازی وجود ندارد.")
             return
         items.reverse()
         digest = build_digest(items)
