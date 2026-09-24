@@ -45,15 +45,45 @@ class RayaMediaService:
         text = re.sub(r"\W+", " ", text.lower(), flags=re.UNICODE)
         return re.sub(r"\s+", " ", text).strip()
 
+    @staticmethod
+    def _duplicate_tokens(text: str) -> set[str]:
+        normalized = RayaMediaService._similarity_text(text)
+        stop = {
+            "از", "به", "در", "با", "و", "یا", "که", "این", "آن", "را", "برای",
+            "یک", "است", "بود", "شد", "شده", "می", "هم", "نیز", "اما", "اگر",
+            "گفت", "اعلام", "کرد", "خبر", "گزارش", "بر", "تا", "خود",
+        }
+        return {w for w in normalized.split() if len(w) > 1 and w not in stop}
+
     def _is_duplicate(self, text: str) -> bool:
         candidate = self._similarity_text(text)
-        if len(candidate) < 35:
+        if len(candidate) < 24:
             return False
+        candidate_tokens = self._duplicate_tokens(candidate)
         for old in self.storage.recent_clean_texts(self.cfg.duplicate_window_hours):
             old_norm = self._similarity_text(old)
             if not old_norm:
                 continue
-            if SequenceMatcher(None, candidate, old_norm, autojunk=False).ratio() >= self.cfg.duplicate_similarity_threshold:
+
+            sequence_ratio = SequenceMatcher(None, candidate, old_norm, autojunk=False).ratio()
+            if sequence_ratio >= self.cfg.duplicate_similarity_threshold:
+                return True
+
+            old_tokens = self._duplicate_tokens(old_norm)
+            if not candidate_tokens or not old_tokens:
+                continue
+            intersection = candidate_tokens & old_tokens
+            union = candidate_tokens | old_tokens
+            jaccard = len(intersection) / len(union)
+            containment = len(intersection) / min(len(candidate_tokens), len(old_tokens))
+
+            # Reworded reports of the same event often have a modest sequence
+            # ratio but retain the same names, places and event vocabulary.
+            if jaccard >= 0.58:
+                return True
+            if containment >= 0.72 and len(intersection) >= 5:
+                return True
+            if sequence_ratio >= 0.72 and containment >= 0.62:
                 return True
         return False
 
