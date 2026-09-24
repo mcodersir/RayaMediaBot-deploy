@@ -40,7 +40,14 @@ class AdminPanel:
                     {"text": "🧠 خلاصه ۱۰ خبر", "callback_data": "summary"},
                 ],
                 [
+                    {"text": "⏸ توقف انتشار", "callback_data": "pause"},
+                    {"text": "▶️ ادامه انتشار", "callback_data": "resume"},
+                ],
+                [
                     {"text": "📊 وضعیت ربات", "callback_data": "status"},
+                    {"text": "🛡 آمار فیلتر", "callback_data": "stats"},
+                ],
+                [
                     {"text": "❓ راهنما", "callback_data": "help"},
                 ],
             ]
@@ -83,6 +90,9 @@ class AdminPanel:
             "/del — حذف/غیرفعال‌کردن کانال\n"
             "/ssy — ساخت و انتشار فوری خلاصه هوشمند ۱۰ خبر اخیر در کانال بله\n"
             "/summary — همان دستور /ssy\n"
+            "/pause — توقف خبرگیری و انتشار بدون خاموش‌کردن ربات\n"
+            "/resume — ادامه خبرگیری و انتشار\n"
+            "/stats — آمار خبرهای منتشرشده/فیلترشده/تکراری\n"
             "/cancel — لغو عملیات افزودن/حذف\n"
             "/help — نمایش همین راهنما"
         )
@@ -107,13 +117,34 @@ class AdminPanel:
                 f"آخرین خبر: @{item.get('source_channel', '?')}/{item.get('source_post_id', '?')} "
                 f"— #{item.get('category', '?')}"
             )
+        paused = self.storage.is_paused()
         self.client.send_text(
             cid,
-            "✅ ربات فعال است\n"
-            f"📡 منابع فعال: {len(channels)}\n"
+            ("⏸ انتشار متوقف است\n" if paused else "✅ ربات فعال است\n")
+            + f"📡 منابع فعال: {len(channels)}\n"
             f"🎯 مقصد: {self.target_channel}\n"
             f"{last_line}",
         )
+
+    def _send_stats(self, cid) -> None:
+        counts = self.storage.status_counts()
+        published = counts.get("published", 0)
+        duplicate = counts.get("duplicate", 0)
+        filtered = sum(v for k, v in counts.items() if k.startswith("filtered:"))
+        details = [
+            f"{k.removeprefix('filtered:')}: {v}"
+            for k, v in counts.items()
+            if k.startswith("filtered:")
+        ]
+        text = (
+            f"🛡 آمار پردازش\n\n"
+            f"منتشرشده: {published}\n"
+            f"تکراری: {duplicate}\n"
+            f"فیلترشده: {filtered}"
+        )
+        if details:
+            text += "\n\nجزئیات فیلتر:\n" + "\n".join(details)
+        self.client.send_text(cid, text)
 
     def _publish_summary(self, cid) -> None:
         items = self.storage.latest_published(10)
@@ -144,6 +175,14 @@ class AdminPanel:
             self.client.send_text(cid, "نام کانالی که باید غیرفعال شود را بفرستید. برای لغو: /cancel")
         elif action == "summary":
             self._publish_summary(cid)
+        elif action == "pause":
+            self.storage.set_paused(True)
+            self.client.send_text(cid, "⏸ انتشار متوقف شد. پنل مدیریت همچنان فعال است.")
+        elif action == "resume":
+            self.storage.set_paused(False)
+            self.client.send_text(cid, "▶️ انتشار دوباره فعال شد.")
+        elif action == "stats":
+            self._send_stats(cid)
         elif action == "status":
             self._send_status(cid)
         elif action == "help":
@@ -203,6 +242,12 @@ class AdminPanel:
             self._handle_action("del", cid)
         elif command in {"/ssy", "/summary"}:
             self._publish_summary(cid)
+        elif command == "/pause":
+            self._handle_action("pause", cid)
+        elif command == "/resume":
+            self._handle_action("resume", cid)
+        elif command == "/stats":
+            self._send_stats(cid)
         else:
             self.client.send_text(cid, "دستور شناخته نشد. /help را بفرستید.")
 
