@@ -15,8 +15,8 @@
   "initial_posts_per_channel": 3,
   "max_media_per_post": 4,
   "request_timeout_seconds": 30,
-  "duplicate_similarity_threshold": 0.88,
-  "duplicate_window_hours": 12,
+  "duplicate_similarity_threshold": 0.82,
+  "duplicate_window_hours": 24,
   "skip_advertisements": true,
   "skip_profanity": true,
   "skip_incitement": true
