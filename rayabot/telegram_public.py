@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .models import MediaItem, TelegramPost
 
@@ -30,6 +32,19 @@ class TelegramPublicReader:
                 "Accept-Language": "fa,en;q=0.8",
             }
         )
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            status=3,
+            backoff_factor=0.8,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         if proxy:
             self.session.proxies.update({"http": proxy, "https": proxy})
 
