@@ -93,16 +93,20 @@ class RayaMediaService:
             number_overlap = candidate_numbers & old_numbers
 
             # Event signature catches paraphrases across different sources.
-            if len(keyword_overlap) >= 5 and (number_overlap or containment >= 0.58):
+            if len(keyword_overlap) >= 5 and (number_overlap or containment >= 0.52):
                 return True
-            if len(keyword_overlap) >= 4 and number_overlap and containment >= 0.50:
+            if len(keyword_overlap) >= 4 and number_overlap and containment >= 0.44:
+                return True
+            # Same named event across two outlets: enough distinctive long
+            # keywords plus strong containment is a duplicate even without a number.
+            if len(keyword_overlap) >= 4 and containment >= 0.60:
                 return True
 
             # Reworded reports of the same event often have a modest sequence
             # ratio but retain the same names, places and event vocabulary.
-            if jaccard >= 0.50 and len(intersection) >= 4:
+            if jaccard >= 0.46 and len(intersection) >= 4:
                 return True
-            if containment >= 0.66 and len(intersection) >= 4:
+            if containment >= 0.60 and len(intersection) >= 4:
                 return True
             if sequence_ratio >= 0.68 and containment >= 0.56:
                 return True
