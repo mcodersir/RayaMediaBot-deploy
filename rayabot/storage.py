@@ -126,6 +126,20 @@ class Storage:
                 return False, 0
             return bool(row["initialized"]), int(row["last_seen_post_id"])
 
+    def initialize_channel(self, channel: str, last_seen_post_id: int) -> None:
+        """Set a cold-start baseline without republishing historical posts."""
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO channel_state(source_channel, initialized, last_seen_post_id)
+                VALUES (?, 1, ?)
+                ON CONFLICT(source_channel) DO UPDATE SET
+                    initialized=1,
+                    last_seen_post_id=MAX(last_seen_post_id, excluded.last_seen_post_id)
+                """,
+                (channel, int(last_seen_post_id)),
+            )
+
     def recent_clean_texts(self, hours: int, limit: int = 300) -> list[str]:
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
         with self._conn() as conn:
