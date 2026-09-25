@@ -44,6 +44,21 @@ INLINE_CTA_RE = re.compile(
     r"(?i)\b(?:join\s+us|follow\s+us|subscribe(?:\s+now)?|click\s+here|read\s+more|our\s+channel)\b[!！.。…\s]*"
 )
 
+SOURCE_BRAND_LINE_RE = re.compile(
+    r"(?i)^\s*(?:"
+    r"(?:id\s*)?[a-z][a-z0-9_.-]{2,64}|"
+    r"(?:[a-z0-9-]+\.)+(?:ir|com|org|net|me|io|co|tv|news|info)"
+    r")\s*$"
+)
+SOURCE_CTA_FA_RE = re.compile(
+    r"(?i)(?:"
+    r"(?:در\s+)?کانال\s+(?:یوتیوب|تلگرام|ایتا|بله|روبیکا).*?(?:ببینید|بخوانید|دنبال\s+کنید)|"
+    r"(?:خبر|متن|ویدئو|گزارش)\s+(?:کامل|بیشتر).*?(?:اینجا|ببینید|بخوانید)|"
+    r"(?:کافه\s+خبر|خبرآنلاین).*?(?:اینجاست|ببینید|بخوانید)|"
+    r"(?:عضو|همراه)\s+(?:کانال|ما)\s+شوید"
+    r")"
+)
+
 PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)کانال\s+خبر\s+فوری"),
     re.compile(r"(?i)عضویت\s+(?:در|محدود)"),
@@ -130,6 +145,12 @@ def strip_source_links_and_branding(text: str) -> str:
             continue
         if re.fullmatch(r"(?i)(?:join|follow|subscribe|channel|telegram|source)\s*(?:us|now)?[!\s]*", cleaned):
             continue
+        # Telegram sources frequently append a plain Latin brand/ID after an
+        # emoji or link. Once markup is stripped it looks like ordinary text.
+        if SOURCE_BRAND_LINE_RE.fullmatch(cleaned):
+            continue
+        if SOURCE_CTA_FA_RE.search(cleaned):
+            continue
         # Do not preserve source separators after their links/hashtags vanish.
         kept.append(cleaned)
     return "\n".join(kept)
@@ -140,6 +161,17 @@ def _cleanup_source_residue(text: str) -> str:
     text = INLINE_CTA_RE.sub("", text)
     text = re.sub(r"(?im)^\s*(?:join|follow|subscribe|channel|telegram|source)\s*(?:us|now)?[!！.。…\s]*$", "", text)
     text = re.sub(r"(?im)^\s*(?:عضویت|ورود|لینک عضویت|کانال ما|منبع)\s*$", "", text)
+    text = SOURCE_CTA_FA_RE.sub("", text)
+    text = re.sub(
+        r"(?im)^\s*(?:id\s*)?[a-z][a-z0-9_.-]{2,64}\s*$",
+        "",
+        text,
+    )
+    text = re.sub(
+        r"(?im)^\s*(?:[a-z0-9-]+\.)+(?:ir|com|org|net|me|io|co|tv|news|info)\s*$",
+        "",
+        text,
+    )
 
     patterns = [
         r"ترجمه\s+اختصاصی(?:\s+[A-Za-z0-9_.-]+)?",
