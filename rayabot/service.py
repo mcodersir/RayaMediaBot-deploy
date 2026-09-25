@@ -55,11 +55,23 @@ class RayaMediaService:
         }
         return {w for w in normalized.split() if len(w) > 1 and w not in stop}
 
+    @staticmethod
+    def _event_signature(text: str) -> tuple[set[str], set[str]]:
+        """Extract stable event clues: numbers and longer content-bearing tokens."""
+        normalized = RayaMediaService._similarity_text(text)
+        numbers = set(re.findall(r"[۰-۹0-9]+", normalized))
+        keywords = {
+            w for w in RayaMediaService._duplicate_tokens(normalized)
+            if len(w) >= 4
+        }
+        return numbers, keywords
+
     def _is_duplicate(self, text: str) -> bool:
         candidate = self._similarity_text(text)
         if len(candidate) < 24:
             return False
         candidate_tokens = self._duplicate_tokens(candidate)
+        candidate_numbers, candidate_keywords = self._event_signature(candidate)
         for old in self.storage.recent_clean_texts(self.cfg.duplicate_window_hours):
             old_norm = self._similarity_text(old)
             if not old_norm:
@@ -76,6 +88,15 @@ class RayaMediaService:
             union = candidate_tokens | old_tokens
             jaccard = len(intersection) / len(union)
             containment = len(intersection) / min(len(candidate_tokens), len(old_tokens))
+            old_numbers, old_keywords = self._event_signature(old_norm)
+            keyword_overlap = candidate_keywords & old_keywords
+            number_overlap = candidate_numbers & old_numbers
+
+            # Event signature catches paraphrases across different sources.
+            if len(keyword_overlap) >= 5 and (number_overlap or containment >= 0.58):
+                return True
+            if len(keyword_overlap) >= 4 and number_overlap and containment >= 0.50:
+                return True
 
             # Reworded reports of the same event often have a modest sequence
             # ratio but retain the same names, places and event vocabulary.
