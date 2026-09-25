@@ -119,12 +119,20 @@ class AdminPanel:
                 f"— #{item.get('category', '?')}"
             )
         paused = self.storage.is_paused()
+        counts = self.storage.status_counts()
+        published = counts.get("published", 0)
+        duplicate = counts.get("duplicate", 0)
+        filtered = sum(v for k, v in counts.items() if k.startswith("filtered:"))
+        top_sources = ", ".join("@" + name for name in channels[:5]) or "—"
         self.client.send_text(
             cid,
             ("⏸ انتشار متوقف است\n" if paused else "✅ ربات فعال است\n")
             + f"📡 منابع فعال: {len(channels)}\n"
+            f"⚡ منابع اول صف: {top_sources}\n"
             f"🎯 مقصد: {self.target_channel}\n"
+            f"📰 منتشرشده: {published} | ♻️ تکراری: {duplicate} | 🛡 فیلتر: {filtered}\n"
             f"{last_line}",
+            self.keyboard(),
         )
 
     def _send_stats(self, cid) -> None:
