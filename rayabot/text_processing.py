@@ -16,6 +16,45 @@ SOURCE_HANDLES = {
     "iranian_militarism",
 }
 
+
+# Real footer/signature patterns observed on the configured Telegram sources.
+# These are removed BEFORE URLs/handles/emojis are stripped, so no residue such
+# as "Join us", "| #T", a bare brand name, or a lone footer emoji survives.
+SOURCE_FOOTER_HANDLES = {
+    "moghavematkhabar", "khabarfuri", "naya_press", "bazchishod",
+    "alonews", "squad_iran", "iranian_militarism",
+    "akhbartelfori", "snntv", "snn_sports", "snnuni",
+    "newscenter", "irankhabar", "khabaronline_ir", "entekhab_ir",
+    "eghtesadnews_com", "myasriran",
+}
+
+SOURCE_FOOTER_PHRASES = (
+    "کانال خبر فوری مقاومت نیوز",
+    "join us",
+    "دریافت آخرین اخبار",
+    "ما را دنبال کنید",
+    "با ما همراه باشید",
+    "عضو کانال شوید",
+)
+
+SOURCE_FOOTER_LINE_PATTERNS = (
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?moghavematkhabar[^\n]{0,20}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?khabarfuri\s*\|\s*اخبار\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?naya_press[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?alonews[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?squad_iran\s*\|\s*#?[a-z0-9_]+\s*$"),
+    re.compile(r"(?i)^\s*join\s+us\s*\|?\s*@?iranian_militarism\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?akhbartelfori[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?newscenter[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?irankhabar[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?khabaronline_ir\s*\|\s*(?:https?://)?(?:www\.)?khabaronline\.ir/?\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?entekhab_ir[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?eghtesadnews_com[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*(?:https?://)?(?:www\.)?asriran\.com/?\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?myasriran[^\n]{0,10}\s*$"),
+    re.compile(r"(?i)^\s*[^\n]{0,20}@?snntv[^\n]{0,10}\s*$"),
+)
+
 TELEGRAM_LINK_RE = re.compile(
     r"(?i)(?:https?://)?(?:t\.me|telegram\.me)/(?:\+?[A-Za-z0-9_\-]+)(?:/\d+)?(?:\?[^\s]*)?"
 )
@@ -114,7 +153,47 @@ def normalize_political_terms(text: str) -> str:
     return text
 
 
+def _remove_known_source_footer_lines(text: str) -> str:
+    """Remove complete source signatures before destructive markup cleanup."""
+    kept: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        lower = line.lower()
+
+        if not line:
+            kept.append("")
+            continue
+
+        if any(pattern.search(line) for pattern in SOURCE_FOOTER_LINE_PATTERNS):
+            continue
+
+        if any(phrase in lower for phrase in SOURCE_FOOTER_PHRASES):
+            # "دریافت آخرین اخبار" and similar lines are source UI/CTA, not news.
+            continue
+
+        handles = {match.lower() for match in re.findall(r"@([A-Za-z0-9_]{3,64})", line)}
+        if handles & SOURCE_FOOTER_HANDLES:
+            # Source signatures are short branding rows. Drop the whole row
+            # before handle stripping, which otherwise leaves emoji/pipes/tags.
+            if len(line) <= 140 or "|" in line or "｜" in line:
+                continue
+
+        # Typical source footer: a domain/brand plus a handle on adjacent rows.
+        compact = DECORATIVE_EMOJI_RE.sub("", line).replace("\ufe0f", "").strip(" |｜—–-،,:؛")
+        if re.fullmatch(
+            r"(?i)(?:moghavematkhabar|khabarfuri|naya_press|bazchishod|alonews|"
+            r"squad_iran|iranian_militarism|akhbartelfori|newscenter|irankhabar|"
+            r"snntv|khabaronline_ir|entekhab_ir|eghtesadnews_com|myasriran)",
+            compact,
+        ):
+            continue
+
+        kept.append(raw_line)
+    return "\n".join(kept)
+
+
 def strip_source_links_and_branding(text: str) -> str:
+    text = _remove_known_source_footer_lines(text)
     text = TELEGRAM_LINK_RE.sub("", text)
     text = GENERIC_URL_RE.sub("", text)
     text = BARE_DOMAIN_RE.sub("", text)
@@ -290,7 +369,6 @@ def clean_text(text: str) -> str:
     text = normalize_political_terms(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"(?m)^\s*:\s*", "", text)
-    text = re.sub(r"([،,:])\s*\n\s*", r"\1 ", text)
     text = re.sub(r"\s+:", ":", text)
     text = _format_paragraphs(text)
     # Final pass catches CTA/emoji residue revealed only after whitespace cleanup.
