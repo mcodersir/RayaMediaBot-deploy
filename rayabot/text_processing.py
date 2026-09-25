@@ -20,6 +20,12 @@ TELEGRAM_LINK_RE = re.compile(
     r"(?i)(?:https?://)?(?:t\.me|telegram\.me)/(?:\+?[A-Za-z0-9_\-]+)(?:/\d+)?(?:\?[^\s]*)?"
 )
 GENERIC_URL_RE = re.compile(r"(?i)(?:https?://|www\.|tg://)\S+")
+BARE_DOMAIN_RE = re.compile(
+    r"(?i)(?<![\\w@])(?:[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\\.)+"
+    r"(?:ir|com|org|net|me|io|co|tv|news|info)(?:/[^\\s<>()\\[\\]{}]*)?"
+)
+SOURCE_HASHTAG_RE = re.compile(r"(?<!\\w)#[\\w\\u0600-\\u06FF\\u200c_-]+", re.UNICODE)
+DECORATIVE_EMOJI_RE = re.compile(r"[\\U0001F000-\\U0001FAFF\\u25A0-\\u27BF]")
 TELEGRAM_SEARCH_JUNK_RE = re.compile(
     r"(?im)^\s*(?:[|｜]\s*)?#?[A-Za-z]\s*$|^\s*\??q\s*=\s*%23[A-Za-z0-9_%+.-]+\s*$"
 )
@@ -57,6 +63,11 @@ PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)با\s+ما\s+همراه\s+باشید"),
     re.compile(r"(?i)در\s+شبکه[‌\s-]*های\s+اجتماعی"),
     re.compile(r"(?i)لینک\s+(?:کانال|عضویت|خبر)"),
+    re.compile(r"(?i)متن\s+(?:کامل\s+)?(?:گفت[\s‌-]*و[\s‌-]*گو|گفتگو).*?(?:اینجاست|اینجا|بخوانید|ببینید)"),
+    re.compile(r"(?i)(?:این\s*ها|اینها).*?(?:بخوانید|ببینید)"),
+    re.compile(r"(?i)(?:تحلیل|تأمل)(?:\s+و\s+(?:تحلیل|تأمل))?\s+بیشتر"),
+    re.compile(r"(?i)خبر\s+از\s+دست\s+ندهید"),
+    re.compile(r"(?i)جزئیات\s+(?:بیشتر\s+)?(?:در|اینجا)"),
 ]
 
 LABEL_PATTERNS = {
@@ -91,7 +102,14 @@ def normalize_political_terms(text: str) -> str:
 def strip_source_links_and_branding(text: str) -> str:
     text = TELEGRAM_LINK_RE.sub("", text)
     text = GENERIC_URL_RE.sub("", text)
+    text = BARE_DOMAIN_RE.sub("", text)
     text = TELEGRAM_QUERY_FRAGMENT_RE.sub("", text)
+    # Source posts often carry decorative bullets, arrows and inline social
+    # branding. RayaMedia adds its own clean footer later, so remove all source
+    # hashtags/emojis here instead of forwarding their visual clutter.
+    text = SOURCE_HASHTAG_RE.sub("", text)
+    text = DECORATIVE_EMOJI_RE.sub("", text)
+    text = text.replace("\\ufe0f", "").replace("\\u200d", "")
 
     def handle_repl(match: re.Match[str]) -> str:
         handle = match.group(1).lower()
@@ -101,7 +119,7 @@ def strip_source_links_and_branding(text: str) -> str:
 
     kept: list[str] = []
     for line in text.splitlines():
-        cleaned = line.strip()
+        cleaned = line.strip(" \\t|｜—–-،,:؛")
         if not cleaned:
             kept.append("")
             continue
@@ -112,7 +130,8 @@ def strip_source_links_and_branding(text: str) -> str:
             continue
         if re.fullmatch(r"(?i)(?:join|follow|subscribe|channel|telegram|source)\s*(?:us|now)?[!\s]*", cleaned):
             continue
-        kept.append(line)
+        # Do not preserve source separators after their links/hashtags vanish.
+        kept.append(cleaned)
     return "\n".join(kept)
 
 
@@ -130,6 +149,11 @@ def _cleanup_source_residue(text: str) -> str:
         r"با\s+ما\s+همراه\s+باشید.*",
         r"در\s+شبکه[‌\s-]*های\s+اجتماعی.*",
         r"لینک\s+(?:کانال|عضویت|خبر).*",
+        r"متن\s+(?:کامل\s+)?(?:گفت[\s‌-]*و[\s‌-]*گو|گفتگو).*?(?:اینجاست|اینجا|بخوانید|ببینید).*",
+        r"(?:این\s*ها|اینها).*?(?:بخوانید|ببینید).*",
+        r"(?:برای\s+)?(?:تحلیل|تأمل)(?:\s+و\s+(?:تحلیل|تأمل))?\s+(?:بیشتر|بیشتر\s+بخوانید).*",
+        r"خبر\s+از\s+دست\s+ندهید.*",
+        r"جزئیات\s+(?:بیشتر\s+)?(?:در|اینجا).*",
         r"(?:سایت|ایتا|بله|روبیکا|سروش\s*پلاس)(?:\s*[|｜،,-]\s*(?:سایت|ایتا|بله|روبیکا|سروش\s*پلاس)){1,}",
     ]
     for pattern in patterns:
@@ -241,8 +265,10 @@ def clean_text(text: str) -> str:
     text = _cleanup_source_residue(text)
     text = _structure_bullets(text)
     text = _strip_trailing_source_footer(text)
+    # Remove separators left on otherwise-empty lines after URL/CTA stripping.
+    text = re.sub(r"(?m)^[ \\t|｜—–\\-،,:؛]+$", "", text)
     text = MULTIBLANK_RE.sub("\n\n", text)
-    return text.strip(" \n|｜—-•")
+    return text.strip(" \n|｜—–-•،,:؛")
 
 
 def apply_news_label(text: str, label: str) -> str:
