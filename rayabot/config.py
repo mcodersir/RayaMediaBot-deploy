@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 class AppConfig:
     root: Path
     telegram_channels: list[str]
+    source_priorities: dict[str, int]
     target_bale_channel: str
     bale_bot_token: str
     telegram_http_proxy: str | None
@@ -56,6 +57,10 @@ def load_config(root: Path | None = None) -> AppConfig:
     return AppConfig(
         root=root,
         telegram_channels=[str(x).lstrip("@").strip() for x in raw["telegram_channels"]],
+        source_priorities={
+            str(k).lstrip("@").strip().lower(): int(v)
+            for k, v in (raw.get("source_priorities") or {}).items()
+        },
         target_bale_channel=target,
         bale_bot_token=token,
         telegram_http_proxy=proxy,
