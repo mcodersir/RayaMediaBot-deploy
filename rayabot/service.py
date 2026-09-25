@@ -170,8 +170,15 @@ class RayaMediaService:
         if initialized:
             candidates = [p for p in posts if p.post_id > last_seen]
         else:
-            count = self.cfg.initial_posts_per_channel
-            candidates = posts[-count:] if count else []
+            # Render Free has an ephemeral filesystem. After a restart/deploy the
+            # local SQLite DB can be empty even though the channel already contains
+            # posts RayaMedia published earlier. Baseline at the newest currently
+            # visible source post and publish only posts that arrive afterwards.
+            newest = max((p.post_id for p in posts), default=0)
+            if newest:
+                self.storage.initialize_channel(channel, newest)
+                log.info("Cold-start baseline @%s -> %s (historical posts skipped)", channel, newest)
+            return
 
         for post in candidates:
             if self.storage.is_seen(channel, post.post_id):
