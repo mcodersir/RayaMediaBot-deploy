@@ -1,5 +1,12 @@
 {
   "telegram_channels": [
+    "KH_B2",
+    "snntv",
+    "newscenter",
+    "khabaronline_ir",
+    "entekhab_ir",
+    "eghtesadnews_com",
+    "MyAsriran",
     "moghavematkhabar",
     "khabarfuri",
     "Naya_Press",
@@ -15,9 +22,25 @@
   "initial_posts_per_channel": 3,
   "max_media_per_post": 4,
   "request_timeout_seconds": 30,
-  "duplicate_similarity_threshold": 0.78,
-  "duplicate_window_hours": 36,
+  "duplicate_similarity_threshold": 0.76,
+  "duplicate_window_hours": 48,
   "skip_advertisements": true,
   "skip_profanity": true,
-  "skip_incitement": true
+  "skip_incitement": true,
+  "source_priorities": {
+    "KH_B2": 100,
+    "snntv": 85,
+    "newscenter": 85,
+    "khabaronline_ir": 75,
+    "entekhab_ir": 75,
+    "eghtesadnews_com": 72,
+    "MyAsriran": 72,
+    "moghavematkhabar": 65,
+    "khabarfuri": 65,
+    "Naya_Press": 60,
+    "BazChiShod": 58,
+    "alonews": 58,
+    "Squad_iran": 55,
+    "Iranian_Militarism": 55
+  }
 }
