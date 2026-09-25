@@ -290,6 +290,12 @@ class RayaMediaService:
                 for channel in dict.fromkeys([*self.cfg.telegram_channels, *dynamic_channels])
                 if channel.lower() not in disabled
             ]
+            # Higher-priority sources are polled first so first-hand reports win
+            # the cross-source duplicate race.
+            channels.sort(
+                key=lambda name: self.cfg.source_priorities.get(name.lower(), 0),
+                reverse=True,
+            )
             for channel in channels:
                 try:
                     self._process_channel(channel)
