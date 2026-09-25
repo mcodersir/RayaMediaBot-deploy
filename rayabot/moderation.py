@@ -41,12 +41,15 @@ GAMBLING_LINK_RE = re.compile(
 EXPLICIT_AD_PHRASES = (
     "تبلیغات", "آگهی", "اسپانسر", "رپورتاژ", "کد تخفیف",
     "تخفیف ویژه", "فروش ویژه", "پیشنهاد ویژه", "جهت تبلیغ", "برای تبلیغ",
+    "تبلیغ", "همکاری تبلیغاتی", "رزرو تبلیغات", "تعرفه تبلیغات", "سفارش تبلیغ",
 )
 CTA_PHRASES = (
     "عضو شوید", "عضو شو", "عضویت", "ثبت نام", "ثبت‌نام", "کلیک کنید",
     "کلیک کن", "سفارش دهید", "سفارش بده", "برای خرید", "خرید کنید",
     "خرید کن", "دایرکت", "پیام دهید", "پیام بدهید", "لینک ورود",
     "لینک عضویت", "همین حالا بخرید", "وارد سایت", "ورود به سایت",
+    "دریافت رایگان", "دانلود رایگان", "امتحان کن", "همین الان", "فرصت محدود",
+    "از دستش نده", "از دست نده", "ثبت سفارش", "اطلاعات بیشتر",
 )
 COMMERCIAL_PHRASES = (
     "خرید", "فروش", "تخفیف", "قیمت ویژه", "اشتراک", "اکانت", "فیلترشکن",
@@ -55,6 +58,8 @@ COMMERCIAL_PHRASES = (
     "پشتیبانی", "تضمین", "ضمانت", "سرویس ویژه", "سرویس اختصاصی",
     "تک کاربر", "دو کاربر", "سه کاربر", "نامحدود", "ip ثابت",
     "آی پی ثابت", "آی‌پی ثابت", "گیگ", "گیگابایت",
+    "دوره آموزشی", "کلاس آنلاین", "مشاوره", "رزرو", "ظرفیت محدود",
+    "ارسال رایگان", "پرداخت در محل", "خرید اقساطی", "کسب درآمد",
 )
 SERVICE_SALE_PHRASES = (
     "کانفیگ", "کانفینگ", "فیلترشکن", "vpn", "پروکسی", "سرور",
@@ -98,6 +103,9 @@ TRANSACTION_PHRASES = (
     "پرداخت", "کارت بانکی", "درگاه", "هدیه", "تخفیف", "بونوس",
 )
 PERCENT_RE = re.compile(r"[۰-۹0-9]+\s*%")
+PHONE_RE = re.compile(r"(?<!\d)(?:\+?98|0)?9[۰-۹0-9]{9}(?!\d)")
+PROMO_EMOJI_RE = re.compile(r"[🎁🎉💰💵💸🛍🛒🔥]{2,}")
+ENGLISH_CTA_RE = re.compile(r"(?i)\b(?:join\s+us|subscribe|buy\s+now|order\s+now|free\s+trial|sign\s+up|shop\s+now)\b")
 
 
 
@@ -131,9 +139,18 @@ def _advertisement_score(raw: str, normalized: str) -> int:
     price_count = len(PRICE_RE.findall(normalized))
     price_list = PRICE_LIST_RE.search(normalized) is not None
     percent_offer = PERCENT_RE.search(normalized) is not None
+    phone_contact = PHONE_RE.search(normalized) is not None
+    promo_emoji = PROMO_EMOJI_RE.search(raw) is not None
+    english_cta = ENGLISH_CTA_RE.search(raw) is not None
 
     if explicit:
         score = max(score, 90)
+    if english_cta:
+        score = max(score, 88)
+    if phone_contact and (commercial or cta or transaction):
+        score = max(score, 92)
+    if promo_emoji and (commercial or cta or price_count):
+        score = max(score, 88)
     if gambling or gambling_link:
         score = max(score, 100)
     if gambling_promo and (transaction or percent_offer or has_bot or link_count):
