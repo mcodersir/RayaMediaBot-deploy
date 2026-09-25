@@ -50,6 +50,13 @@ PROMO_LINE_PATTERNS = [
     re.compile(r"(?i)^\s*click\s+here\s*$"),
     re.compile(r"(?i)^\s*read\s+more\s*$"),
     re.compile(r"(?i)^\s*our\s+channel\s*$"),
+    re.compile(r"(?i)ترجمه\s+اختصاصی"),
+    re.compile(r"(?i)دریافت\s+آخرین\s+اخبار"),
+    re.compile(r"(?i)آخرین\s+اخبار\s*[:：]"),
+    re.compile(r"(?i)ما\s+را\s+دنبال\s+کنید"),
+    re.compile(r"(?i)با\s+ما\s+همراه\s+باشید"),
+    re.compile(r"(?i)در\s+شبکه[‌\s-]*های\s+اجتماعی"),
+    re.compile(r"(?i)لینک\s+(?:کانال|عضویت|خبر)"),
 ]
 
 LABEL_PATTERNS = {
@@ -110,11 +117,49 @@ def strip_source_links_and_branding(text: str) -> str:
 
 
 def _cleanup_source_residue(text: str) -> str:
-    """Remove source-channel CTA residue after links/handles are stripped."""
+    """Remove source-channel CTA/branding residue after links/handles are stripped."""
     text = INLINE_CTA_RE.sub("", text)
     text = re.sub(r"(?im)^\s*(?:join|follow|subscribe|channel|telegram|source)\s*(?:us|now)?[!！.。…\s]*$", "", text)
     text = re.sub(r"(?im)^\s*(?:عضویت|ورود|لینک عضویت|کانال ما|منبع)\s*$", "", text)
+
+    patterns = [
+        r"ترجمه\s+اختصاصی(?:\s+[A-Za-z0-9_.-]+)?",
+        r"دریافت\s+آخرین\s+اخبار\s*[:：]?.*",
+        r"آخرین\s+اخبار\s*[:：].*",
+        r"ما\s+را\s+دنبال\s+کنید.*",
+        r"با\s+ما\s+همراه\s+باشید.*",
+        r"در\s+شبکه[‌\s-]*های\s+اجتماعی.*",
+        r"لینک\s+(?:کانال|عضویت|خبر).*",
+        r"(?:سایت|ایتا|بله|روبیکا|سروش\s*پلاس)(?:\s*[|｜،,-]\s*(?:سایت|ایتا|بله|روبیکا|سروش\s*پلاس)){1,}",
+    ]
+    for pattern in patterns:
+        text = re.sub(rf"(?im)^\s*[👉👈🔗📲📢•\-–—]*\s*(?:{pattern})\s*$", "", text)
     return text
+
+
+def _strip_trailing_source_footer(text: str) -> str:
+    """Drop trailing source branding blocks without touching the news body."""
+    lines = text.splitlines()
+    source_words = (
+        "ترجمه اختصاصی", "دریافت آخرین اخبار", "آخرین اخبار:",
+        "ما را دنبال کنید", "با ما همراه باشید", "شبکه های اجتماعی",
+        "شبکه‌های اجتماعی", "سروش پلاس", "روبیکا", "ایتا",
+        "join us", "follow us", "subscribe",
+    )
+    while lines:
+        tail = lines[-1].strip()
+        if not tail:
+            lines.pop()
+            continue
+        low = tail.lower()
+        if any(word.lower() in low for word in source_words):
+            lines.pop()
+            continue
+        if re.fullmatch(r"[👉👈🔗📲📢•|｜\-–—\s]+", tail):
+            lines.pop()
+            continue
+        break
+    return "\n".join(lines)
 
 
 def _structure_bullets(text: str) -> str:
@@ -195,6 +240,7 @@ def clean_text(text: str) -> str:
     # Final pass catches CTA/emoji residue revealed only after whitespace cleanup.
     text = _cleanup_source_residue(text)
     text = _structure_bullets(text)
+    text = _strip_trailing_source_footer(text)
     text = MULTIBLANK_RE.sub("\n\n", text)
     return text.strip(" \n|｜—-•")
 
